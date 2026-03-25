@@ -40,6 +40,18 @@ resource "aws_iam_role" "datasync_role" {
 #   - AbortMultipartUpload and ListMultipartUploadParts are required for large
 #     file transfers that DataSync splits into multipart uploads.
 # ================================================================================
+# ================================================================================
+# OUTPUT: datasync_role_arn
+# ================================================================================
+# Purpose:
+#   - Exposes the DataSync IAM role ARN so activate-agent.sh can reference it
+#     when creating the S3 destination location for the SMB task.
+# ================================================================================
+output "datasync_role_arn" {
+  description = "ARN of the IAM role DataSync assumes to write to S3"
+  value       = aws_iam_role.datasync_role.arn
+}
+
 resource "aws_iam_role_policy" "datasync_s3_policy" {
   name = "datasync-s3-access"
   role = aws_iam_role.datasync_role.id

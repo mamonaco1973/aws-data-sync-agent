@@ -1,15 +1,18 @@
 #!/bin/bash
 # ================================================================================
-# Active Directory + Server + DataSync Deployment Orchestration Script
+# Active Directory + Server + DataSync + Agent Deployment Orchestration Script
 # ================================================================================
 # Description:
-#   Automates a three-phase AWS infrastructure build:
+#   Automates a four-phase AWS infrastructure build:
 #     1. Active Directory (AD) Domain Controller.
 #     2. Dependent EC2 servers and EFS that rely on the AD environment.
-#     3. DataSync tasks and S3 destination bucket.
+#     3. DataSync tasks and S3 destination bucket (agentless EFS-to-S3).
+#     4. DataSync agent EC2 instance + SMB-to-S3 task (agent-based).
 #
 # Notes:
 #   - Fail-fast enabled: any error terminates execution immediately.
+#   - activate-agent.sh is run after Phase 4 to register the agent and
+#     create the SMB source location and task via the AWS CLI.
 # ================================================================================
 
 set -euo pipefail
@@ -61,6 +64,24 @@ terraform init
 terraform apply -auto-approve
 
 cd ..
+
+# ------------------------------------------------------------------------------
+# Phase 4: Provision DataSync Agent EC2 Instance
+# ------------------------------------------------------------------------------
+echo "NOTE: Building DataSync agent instance..."
+
+cd 04-agent || { echo "ERROR: Directory 04-agent not found"; exit 1; }
+
+terraform init
+terraform apply -auto-approve
+
+cd ..
+
+# ------------------------------------------------------------------------------
+# Agent Activation: Register Agent and Create SMB Task
+# ------------------------------------------------------------------------------
+echo "NOTE: Activating DataSync agent and creating SMB task..."
+./activate-agent.sh
 
 # ------------------------------------------------------------------------------
 # Build Validation

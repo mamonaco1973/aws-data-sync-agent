@@ -51,6 +51,7 @@ echo ""
 # Read DataSync Task ARNs from Terraform Output
 # Terraform outputs a JSON map of { project-name: task-arn }.
 # Parse into an associative array for named tracking through execution.
+# Also check SSM for the agent-based SMB task ARN created by activate-agent.sh.
 # ------------------------------------------------------------------------------
 echo "============================================================================"
 echo "DataSync — Starting Tasks"
@@ -62,6 +63,20 @@ while IFS=$'\t' read -r NAME ARN; do
   TASK_MAP["${NAME}"]="${ARN}"
 done < <(terraform -chdir="${SCRIPT_DIR}/03-datasync" output -json datasync_task_arns \
   | jq -r 'to_entries[] | [.key, .value] | @tsv')
+
+# Add the SMB agent task if activate-agent.sh has been run.
+SMB_TASK_ARN=$(aws ssm get-parameter \
+  --name "/datasync/smb-task-arn" \
+  --query 'Parameter.Value' \
+  --output text 2>/dev/null || true)
+
+if [[ -n "${SMB_TASK_ARN}" ]]; then
+  TASK_MAP["smb-efs"]="${SMB_TASK_ARN}"
+  echo "NOTE: SMB agent task found — adding to run."
+else
+  echo "NOTE: No SMB agent task found in SSM — running EFS tasks only."
+fi
+echo ""
 
 if [[ "${#TASK_MAP[@]}" -eq 0 ]]; then
   echo "ERROR: No DataSync tasks found in 03-datasync Terraform output."
