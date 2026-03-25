@@ -16,12 +16,11 @@
 # RESOURCE: aws_cloudwatch_log_group.datasync
 # ================================================================================
 # Purpose:
-#   - Destination for all DataSync task execution logs.
-#   - Shared across all four tasks — each task execution writes to its own
-#     log stream within this group.
+#   - Destination for DataSync task execution logs from the SMB agent task.
+#   - Each task execution writes to its own log stream within this group.
 # ================================================================================
 resource "aws_cloudwatch_log_group" "datasync" {
-  name              = "/datasync/efs-to-s3"
+  name              = "/datasync/smb-to-s3"
   retention_in_days = 30
 
   tags = { Name = "datasync-logs" }
@@ -51,7 +50,7 @@ resource "aws_cloudwatch_log_resource_policy" "datasync" {
         "logs:PutLogEvents",
         "logs:CreateLogStream"
       ]
-      Resource = "${aws_cloudwatch_log_group.datasync.arn}:*"
+      Resource  = "${aws_cloudwatch_log_group.datasync.arn}:*"
     }]
   })
 }

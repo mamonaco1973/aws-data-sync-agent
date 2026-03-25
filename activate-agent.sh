@@ -156,8 +156,12 @@ ADMIN_SECRET=$(aws secretsmanager get-secret-value \
   --query 'SecretString' \
   --output text)
 
-SMB_USER=$(echo "${ADMIN_SECRET}" | jq -r '.username')
+SMB_USER_RAW=$(echo "${ADMIN_SECRET}" | jq -r '.username')
 SMB_PASSWORD=$(echo "${ADMIN_SECRET}" | jq -r '.password')
+
+# Strip domain prefix (e.g. MCLOUD\Admin -> Admin). The --domain flag carries
+# the domain; the --user field must be the bare username only.
+SMB_USER="${SMB_USER_RAW##*\\}"
 
 if [[ -z "${SMB_USER}" ]] || [[ -z "${SMB_PASSWORD}" ]]; then
   echo "ERROR: Could not parse username/password from admin_ad_credentials_efs."

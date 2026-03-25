@@ -46,7 +46,7 @@ SMB_TASK_ARN=$(aws ssm get-parameter \
 if [[ -n "${SMB_TASK_ARN}" ]]; then
   echo "NOTE: Deleting SMB DataSync task: ${SMB_TASK_ARN}"
 
-  # Retrieve and delete source and destination locations before the task.
+  # Read location and agent ARNs before deleting anything.
   SMB_SRC_ARN=$(aws datasync describe-task \
     --task-arn "${SMB_TASK_ARN}" \
     --query 'SourceLocationArn' \
@@ -57,27 +57,50 @@ if [[ -n "${SMB_TASK_ARN}" ]]; then
     --query 'DestinationLocationArn' \
     --output text 2>/dev/null || true)
 
-  # Retrieve agent ARN via the SMB location before deleting either resource.
   AGENT_ARN=$(aws datasync describe-location-smb \
     --location-arn "${SMB_SRC_ARN}" \
     --query 'AgentArns[0]' \
     --output text 2>/dev/null || true)
 
-  aws datasync delete-task --task-arn "${SMB_TASK_ARN}" 2>/dev/null || true
+  # Cancel any active execution before attempting task deletion.
+  # DataSync rejects delete-task while an execution is in progress.
+  ACTIVE_EXEC=$(aws datasync list-task-executions \
+    --task-arn "${SMB_TASK_ARN}" \
+    --query 'TaskExecutions[?Status!=`SUCCESS` && Status!=`ERROR`].TaskExecutionArn' \
+    --output text 2>/dev/null || true)
+
+  if [[ -n "${ACTIVE_EXEC}" ]]; then
+    echo "NOTE: Cancelling active task execution: ${ACTIVE_EXEC}"
+    aws datasync cancel-task-execution --task-execution-arn "${ACTIVE_EXEC}"
+
+    # Wait for the execution to reach a terminal state before proceeding.
+    CANCEL_WAIT=0
+    until [[ "${CANCEL_WAIT}" -ge 120 ]]; do
+      STATUS=$(aws datasync describe-task-execution \
+        --task-execution-arn "${ACTIVE_EXEC}" \
+        --query 'Status' --output text 2>/dev/null || echo "UNKNOWN")
+      [[ "${STATUS}" == "ERROR" || "${STATUS}" == "SUCCESS" ]] && break
+      echo "NOTE: Waiting for execution to stop (status: ${STATUS})..."
+      sleep 10
+      CANCEL_WAIT=$(( CANCEL_WAIT + 10 ))
+    done
+  fi
+
+  aws datasync delete-task --task-arn "${SMB_TASK_ARN}"
   echo "NOTE: SMB task deleted."
 
   if [[ -n "${SMB_SRC_ARN}" ]] && [[ "${SMB_SRC_ARN}" != "None" ]]; then
-    aws datasync delete-location --location-arn "${SMB_SRC_ARN}" 2>/dev/null || true
+    aws datasync delete-location --location-arn "${SMB_SRC_ARN}"
     echo "NOTE: SMB source location deleted."
   fi
 
   if [[ -n "${SMB_DST_ARN}" ]] && [[ "${SMB_DST_ARN}" != "None" ]]; then
-    aws datasync delete-location --location-arn "${SMB_DST_ARN}" 2>/dev/null || true
+    aws datasync delete-location --location-arn "${SMB_DST_ARN}"
     echo "NOTE: SMB S3 destination location deleted."
   fi
 
   if [[ -n "${AGENT_ARN}" ]] && [[ "${AGENT_ARN}" != "None" ]]; then
-    aws datasync delete-agent --agent-arn "${AGENT_ARN}" 2>/dev/null || true
+    aws datasync delete-agent --agent-arn "${AGENT_ARN}"
     echo "NOTE: DataSync agent deregistered."
   fi
 
