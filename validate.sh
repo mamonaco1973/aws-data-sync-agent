@@ -145,7 +145,6 @@ while true; do
 
   sleep "${POLL_INTERVAL}"
   ELAPSED=$(( ELAPSED + POLL_INTERVAL ))
-  echo ""
 done
 
 # ------------------------------------------------------------------------------
@@ -172,7 +171,7 @@ if [[ -n "${BUCKET}" ]]; then
   echo ""
   echo "NOTE: Destination bucket: s3://${BUCKET}"
   echo ""
-  aws s3 ls s3://${BUCKET}/
+  aws s3 ls s3://${BUCKET}/efs
   echo ""
 fi
 
