@@ -116,6 +116,10 @@ cups options = raw
 
 kerberos method = secrets and keytab
 
+# Allow NTLMv2 authentication so non-domain-joined clients (e.g. DataSync
+# agent) can authenticate without a Kerberos ticket.
+ntlm auth = ntlmv2-only
+
 template homedir = /home/%U
 template shell = /bin/bash
 #netbios
