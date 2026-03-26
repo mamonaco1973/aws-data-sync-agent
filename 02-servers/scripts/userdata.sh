@@ -144,7 +144,6 @@ winbind enum groups = yes
 winbind enum users = yes
 winbind cache time = 30
 idmap cache time = 60
-winbind negative cache time = 0
 
 [homes]
 browseable = no
@@ -180,6 +179,14 @@ cp /tmp/nsswitch.conf /etc/nsswitch.conf
 rm /tmp/nsswitch.conf
 
 systemctl restart winbind smb nmb sssd
+
+# Explicitly re-join via net ads to ensure winbind's machine account trust is
+# initialised. realm join --membership-software=samba alone is not sufficient —
+# winbind's trust can be left in a broken state, causing NTLMv2 authentication
+# (used by non-domain-joined clients such as the DataSync agent) to fail even
+# though Kerberos-based clients (Windows) continue to work.
+net ads join -U "${admin_username}%${admin_password}"
+systemctl restart winbind
 
 # Sudo + permissions
 echo "%linux-admins ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/10-linux-admins
