@@ -227,7 +227,7 @@ echo ""
 
 S3_LOCATION_ARN=$(aws datasync create-location-s3 \
   --s3-bucket-arn "${S3_BUCKET_ARN}" \
-  --subdirectory "/smb-efs" \
+  --subdirectory "/efs" \
   --s3-config "BucketAccessRoleArn=${DATASYNC_ROLE_ARN}" \
   --tags Key=Name,Value=s3-dst-smb-efs \
   --query 'LocationArn' \
@@ -241,6 +241,12 @@ echo ""
 # Options mirror the EFS tasks: transfer changed files, remove deleted files,
 # verify only transferred files, and log at TRANSFER level.
 # CloudWatch log group is shared with the EFS tasks for consolidated visibility.
+#
+# The /home exclude filter is required because the Samba share root (/efs)
+# contains /efs/home — the EFS-backed storage for AD user home directories.
+# Those subdirectories are chmod 700 and inaccessible to rpatel. Without the
+# filter DataSync fails to scan them and refuses to run REMOVE, treating the
+# incomplete scan as a risk to destination data.
 # ------------------------------------------------------------------------------
 echo "============================================================================"
 echo "DataSync Agent — Creating SMB Task"
@@ -258,6 +264,7 @@ TASK_ARN=$(aws datasync create-task \
   --destination-location-arn "${S3_LOCATION_ARN}" \
   --cloud-watch-log-group-arn "${LOG_GROUP_ARN}" \
   --options "TransferMode=CHANGED,PreserveDeletedFiles=REMOVE,VerifyMode=ONLY_FILES_TRANSFERRED,LogLevel=TRANSFER" \
+  --excludes FilterType=SIMPLE_PATTERN,Value="/home" \
   --tags Key=Name,Value=sync-smb-efs \
   --query 'TaskArn' \
   --output text)
