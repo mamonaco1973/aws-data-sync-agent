@@ -9,7 +9,7 @@ The infrastructure is deployed in four phases:
 3. **S3 + IAM + CloudWatch** — The S3 destination bucket, IAM role for DataSync S3 access, and CloudWatch log group for task execution logs.
 4. **DataSync Agent** — A DataSync agent EC2 instance provisioned in the VPC. After Terraform apply, `activate-agent.sh` registers the agent, creates an SMB source location pointing at the Samba share, and wires it to an S3 destination task.
 
-![AWS diagram](aws-data-sync-agent.png)
+![AWS diagram](aws-data-sync.png)
 
 ---
 
@@ -23,6 +23,8 @@ The key distinction this project demonstrates:
 | **How DataSync connects** | ENI injected directly into VPC | Agent EC2 inside VPC proxies the connection |
 | **When required** | AWS-native storage (EFS, FSx) | Non-AWS or protocol-specific sources (SMB, NFS on-prem) |
 | **Activation step** | None | HTTP handshake to agent port 80 |
+
+![flow](datasync-flow.png)
 
 A DataSync **agent** is an EC2 instance running AWS-provided software that acts as a bridge between the DataSync service and storage that DataSync cannot reach directly. For SMB sources, the agent mounts the share internally using `mount.cifs` and streams data to the DataSync service, which writes it to the S3 destination.
 
