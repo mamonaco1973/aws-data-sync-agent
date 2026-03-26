@@ -185,7 +185,7 @@ systemctl restart winbind smb nmb sssd
 # winbind's trust can be left in a broken state, causing NTLMv2 authentication
 # (used by non-domain-joined clients such as the DataSync agent) to fail even
 # though Kerberos-based clients (Windows) continue to work.
-net ads join -U "${admin_username}%${admin_password}"
+net ads join -U "$admin_username%$admin_password"
 systemctl restart winbind
 
 # Sudo + permissions
