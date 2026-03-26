@@ -152,14 +152,14 @@ echo ""
 # DataSync needs valid AD credentials to authenticate against the SMB share.
 # ------------------------------------------------------------------------------
 ADMIN_SECRET=$(aws secretsmanager get-secret-value \
-  --secret-id "admin_ad_credentials_efs" \
+  --secret-id "rpatel_ad_credentials_efs" \
   --query 'SecretString' \
   --output text)
 
 SMB_USER_RAW=$(echo "${ADMIN_SECRET}" | jq -r '.username')
 SMB_PASSWORD=$(echo "${ADMIN_SECRET}" | jq -r '.password')
 
-# Strip domain prefix (e.g. MCLOUD\Admin -> Admin). The --domain flag carries
+# Strip domain prefix (e.g. MCLOUD\rpatel -> rpatel). The --domain flag carries
 # the domain; the --user field must be the bare username only.
 SMB_USER="${SMB_USER_RAW##*\\}"
 
