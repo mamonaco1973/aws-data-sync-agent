@@ -1,106 +1,157 @@
-# Video Script — AWS DataSync: EFS to S3 Data Migration
+# Video Script — AWS DataSync Agent: SMB to S3 Data Migration
 
 ---
 
 ## Introduction
 
-[Show DataSync task executions running with throughput and file counts updating]
+[Show DataSync task execution running with throughput and file counts updating]
 
-Moving large datasets between storage systems can be complicated. You need reliable transfers, integrity checks, and the ability to run migrations at scale.
+In the last video we used AWS DataSync to move data from Amazon EFS directly into S3 without any agent — DataSync injected a network interface into our VPC and mounted EFS internally.
 
-[Show Task Details]
+[Show the DataSync Agents console page — empty or showing the new agent]
 
-AWS DataSync is a managed service designed for this problem. 
+But what happens when your source storage isn't a native AWS service? What if your data lives on an SMB file share — the kind of share that Windows clients connect to?
 
-[Show AWS source and target locations]
+[Show a Windows File Explorer connected to the Samba share]
 
-It moves data between storage systems efficiently while handling scheduling, retries, verification, and incremental transfers so large migrations can stay synchronized until the final cutover.
+That's where the DataSync agent comes in.
 
-[Show the full migration flow diagram briefly with no highlights]
+[Show the DataSync agent EC2 instance in the EC2 console]
 
-In this project we'll build a complete DataSync migration pipeline using Terraform and watch it move data between storage systems.
+In this project we'll deploy a DataSync agent — a purpose-built EC2 instance that runs inside your VPC and acts as a bridge between the DataSync service and an SMB source that DataSync cannot reach on its own.
+
+[Show the flow diagram]
+
+The source is a Samba share running on our domain-joined Linux gateway, backed by Amazon EFS. The agent mounts that share over SMB and streams the data through DataSync into S3.
 
 ---
 
 ## Architecture
 
-[ FULL DIAGRAM ON SCREEN ]
+[FULL ARCHITECTURE DIAGRAM ON SCREEN]
 
-Now let's review the architecture.
+Let's walk through the architecture.
 
-[ Highlight LEFT column: "EFS Source Locations" ]
+[Highlight ad-subnet with AD DC]
 
-On the left side are the source file systems. Each of these directories lives inside an Amazon EFS file system.
+Phase one is the same Mini Active Directory setup we've used in previous projects. Samba 4 on Ubuntu acts as the domain controller for the mcloud.mikecloud.com domain, handling authentication and DNS for everything in the VPC.
 
-These represent different datasets that we want to migrate.
+[Highlight efs-client-gateway in vm-subnet-1]
 
-[ Highlight CENTER column: "DataSync Tasks" ]
+Phase two is the Linux gateway instance. It mounts Amazon EFS over NFS, and then re-exports that storage as a Samba SMB share named efs. This is the data source that DataSync will read from.
 
-In the middle are the AWS DataSync tasks.
+[Highlight datasync-agent EC2 in vm-subnet-1]
 
-Each task is responsible for scanning a source location
-and synchronizing its contents to a destination.
+Phase three provisions the DataSync agent — a t3.large EC2 running the AWS-provided agent AMI. This instance lives inside the VPC so it can reach the Samba share on port 445. It has no IAM role — it authenticates to the DataSync service using an activation key, not instance credentials.
 
-[ Highlight RIGHT column: "S3 Destination Locations" ]
+[Show activate-agent.sh in the terminal]
 
-On the right side are the S3 destinations.
+After Terraform provisions the agent EC2, we run activate-agent.sh. This script polls the agent's HTTP endpoint on port 80, retrieves a one-time activation key, and registers the agent with DataSync using the AWS CLI. From that point the agent is fully managed by the service.
 
-Each task writes the synchronized data into a corresponding prefix inside an S3 bucket.
+[Highlight the SMB/445 arrow between datasync-agent and efs-client-gateway]
 
-[ Highlight ONE FULL ROW across the diagram ]
+Once activated, the agent mounts the Samba share over SMB using Active Directory credentials and makes the data available to the DataSync task.
 
-The flow is simple.
+[Highlight the HTTPS dashed arrow between DataSync service and datasync-agent]
 
-DataSync reads files from EFS, transfers them across the service, and writes them into S3.
+The DataSync service communicates with the agent over HTTPS to coordinate the transfer. The agent reads from the SMB share, and the service writes the data directly into S3.
 
-[ Highlight BOTTOM: Task Execution Lifecycle ]
+[Highlight the S3 bucket]
 
-When a task runs, it moves through several phases.
+The destination is the same encrypted, versioned S3 bucket we use in our other DataSync projects — with the data landing under the /efs prefix.
 
-It starts queued, launches the transfer workers,prepares the dataset, performs the transfer, verifies the results, and finally completes successfully.
+---
+
+## Flow Diagram
+
+[FLOW DIAGRAM ON SCREEN]
+
+[Highlight the activation note box at the top]
+
+The one-time activation step is worth calling out. The agent EC2 boots and immediately exposes an HTTP endpoint. activate-agent.sh polls that endpoint, collects the key, and calls aws datasync create-agent. After that the HTTP port is no longer needed.
+
+[Highlight SMB source → DataSync agent arrow]
+
+During a task execution the agent mounts the share as the rpatel domain user and reads files from the efs share root.
+
+[Highlight DataSync agent → task → S3]
+
+The DataSync service coordinates the transfer, handles retries and integrity verification, and writes the result into S3.
+
+[Highlight the lifecycle strip at the bottom]
+
+The task execution follows the same lifecycle as any DataSync task — queued, launching, preparing, transferring, verifying, and finally success.
+
+---
 
 ## Build Results
 
-[ Show AWS Console – DataSync → Locations ]
+[Show EC2 console — datasync-agent instance running]
 
-After the build completes, the DataSync locations are created.
+After apply.sh completes, the agent EC2 is running alongside the efs-client-gateway in vm-subnet-1.
 
-Here we have the EFS source location and the S3 destination location that will receive the migrated data.
+[Show DataSync console — Agents page]
 
-[ Switch to DataSync → Tasks ]
+In the DataSync console under Agents we can see the registered agent, its status, and the VPC it's connected to.
 
-Terraform also created the DataSync tasks.
+[Show DataSync console — Locations page]
 
-Each task maps a specific EFS directory to a corresponding destination prefix in S3.
+activate-agent.sh created two locations. The SMB source location points at the private IP of efs-client-gateway using the efs share name. The S3 destination location points at our bucket under the /efs prefix.
 
-[ Click one task: sync-aws-efs ]
+[Click the SMB location — show the server, subdirectory, and agent ARN]
 
-If we open one of the tasks, you can see the source EFS location and the destination S3 bucket configuration.
+If we open the SMB location you can see the server hostname, the subdirectory which maps to the share name, and the agent ARN that will be used to mount it.
 
-[ Switch to S3 Console – open destination bucket ]
+[Show DataSync console — Tasks page — sync-smb-efs]
 
-This is the destination S3 bucket.
+There is a single task — sync-smb-efs — wiring the SMB source to the S3 destination. The task is configured to transfer changed files only, remove deleted files from S3, verify transferred files, and log at the TRANSFER level to CloudWatch.
 
-Each DataSync task writes to its own prefix inside the bucket.
+[Show SSM Parameter Store — /datasync/smb-task-arn]
+
+The task ARN is stored in SSM Parameter Store under /datasync/smb-task-arn. validate.sh reads this at runtime to start and monitor the task.
+
+---
 
 ## Demo
 
-[ Show Validate.sh]
+[Show validate.sh running in the terminal]
 
-Now let's run the migration. The validate script triggers the DataSync tasks.
+Let's run the migration. validate.sh reads the task ARN from SSM, starts the execution, and polls every fifteen seconds until the task completes.
 
-[ Show Build happening]
+[Show status lines updating: LAUNCHING → PREPARING → TRANSFERRING]
 
-Here we can see the task execution moving through the transfer lifecycle.
+You can see the task moving through the lifecycle — launching the agent connection, preparing the file inventory, then transferring.
 
-[Show the transfer statistics]
+[Show VERIFYING then SUCCESS]
 
-Since the initial sync already completed,  DataSync only checks for changes.
+After the transfer DataSync verifies every file that was moved before marking the execution as successful.
 
-In this case there are no updates so nothing needs to be transferred.
+[Show the transfer summary printed by validate.sh]
 
-[Show S3 bucket]
+The summary shows the transferred and verified file counts.
 
-The data is already present in S3, so the task simply verifies that the source and destination are in sync.
+[Show CloudWatch Logs — log group /datasync/smb-to-s3]
 
-This incremental behavior makes DataSync useful for large migrations where a final sync is needed just before cutover.
+validate.sh also downloads the CloudWatch execution logs to a timestamped file in the project root. Every transferred and skipped file is recorded here, which is useful for auditing large migrations.
+
+[Show S3 bucket — /efs prefix — open a few folders]
+
+In S3 we can see the data has landed under the /efs prefix, matching the directory structure from the Samba share.
+
+[Show re-running validate.sh with no changes]
+
+If we run the task again with no changes to the source, DataSync scans the share, finds nothing new, and completes immediately. This incremental behavior is exactly what makes DataSync useful for large migrations — you can keep the destination synchronized and then do a final lightweight sync right before cutover.
+
+---
+
+## Wrap Up
+
+[Show the architecture diagram one more time]
+
+This project shows the two main DataSync patterns side by side. When your source is native AWS storage like EFS, DataSync connects directly with no agent required. When your source is SMB — whether that's an on-premises file server or a Samba share in your VPC — you deploy an agent to bridge the gap.
+
+The agent activation, location creation, and task wiring are all handled by a single shell script using the AWS CLI, keeping the Terraform footprint focused on infrastructure and leaving the DataSync configuration fully automated and repeatable.
+
+[Show the GitHub link or repo]
+
+All the code for this project is available on GitHub. Links are in the description below.
