@@ -6,13 +6,13 @@
 #   Automates a four-phase AWS infrastructure build:
 #     1. Active Directory (AD) Domain Controller.
 #     2. Dependent EC2 servers and EFS that rely on the AD environment.
-#     3. DataSync tasks and S3 destination bucket (agentless EFS-to-S3).
-#     4. DataSync agent EC2 instance + SMB-to-S3 task (agent-based).
+#     3. S3 bucket, IAM role, and CloudWatch log group for DataSync.
+#     4. Two DataSync agent EC2 instances (agent-based SMB-to-S3).
 #
 # Notes:
 #   - Fail-fast enabled: any error terminates execution immediately.
-#   - activate-agent.sh is run after Phase 4 to register the agent and
-#     create the SMB source location and task via the AWS CLI.
+#   - activate-agent.sh is run after Phase 4 to register both agents and
+#     create four SMB tasks (two per agent) via the AWS CLI.
 # ================================================================================
 
 set -euo pipefail

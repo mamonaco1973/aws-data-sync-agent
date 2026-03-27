@@ -3,15 +3,16 @@
 # validate.sh
 #
 # Purpose:
-#   - Reads the SMB DataSync task ARN from SSM Parameter Store.
-#   - Starts the SMB-to-S3 task and polls until it reaches SUCCESS or ERROR.
+#   - Reads four SMB DataSync task ARNs from SSM Parameter Store.
+#   - Starts all four tasks concurrently (two per agent) and polls until
+#     every task reaches SUCCESS or any task reaches ERROR.
 #   - Downloads CloudWatch execution logs to timestamped files in the project
 #     root for post-run inspection.
 #
 # Notes:
 #   - Requires jq and the AWS CLI in PATH.
-#   - The SMB task ARN is written to SSM by activate-agent.sh — that script
-#     must complete successfully before validate.sh can run.
+#   - Task ARNs are written to SSM by activate-agent.sh — that script must
+#     complete successfully before validate.sh can run.
 # ================================================================================
 
 set -euo pipefail
@@ -50,10 +51,9 @@ echo "NOTE: EFS population complete. Starting DataSync tasks."
 echo ""
 
 # ------------------------------------------------------------------------------
-# Read SMB Task ARN from SSM Parameter Store
-# The SMB task ARN is written by activate-agent.sh after agent registration.
-# It is stored in SSM rather than Terraform state because the task is created
-# via the AWS CLI, not Terraform.
+# Read SMB Task ARNs from SSM Parameter Store
+# activate-agent.sh stores one ARN per project under /datasync/smb-task-arn/.
+# Four tasks are loaded — two per agent — and run concurrently.
 # ------------------------------------------------------------------------------
 echo "============================================================================"
 echo "DataSync — Starting Tasks"
@@ -62,19 +62,20 @@ echo ""
 
 declare -A TASK_MAP
 
-SMB_TASK_ARN=$(aws ssm get-parameter \
-  --name "/datasync/smb-task-arn" \
-  --query 'Parameter.Value' \
-  --output text 2>/dev/null || true)
+for PROJECT in aws-efs aws-mgn-example aws-workspaces aws-mysql; do
+  ARN=$(aws ssm get-parameter \
+    --name "/datasync/smb-task-arn/${PROJECT}" \
+    --query 'Parameter.Value' --output text 2>/dev/null || true)
 
-if [[ -z "${SMB_TASK_ARN}" ]]; then
-  echo "ERROR: SMB task ARN not found in SSM (/datasync/smb-task-arn)."
-  echo "       Run activate-agent.sh before validate.sh."
-  exit 1
-fi
+  if [[ -z "${ARN}" ]]; then
+    echo "ERROR: Task ARN not found in SSM for ${PROJECT}."
+    echo "       Run activate-agent.sh before validate.sh."
+    exit 1
+  fi
 
-TASK_MAP["smb-efs"]="${SMB_TASK_ARN}"
-echo "NOTE: SMB task ARN: ${SMB_TASK_ARN}"
+  TASK_MAP["${PROJECT}"]="${ARN}"
+  echo "NOTE: ${PROJECT}: ${ARN}"
+done
 echo ""
 
 # ------------------------------------------------------------------------------

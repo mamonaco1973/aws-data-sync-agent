@@ -28,87 +28,97 @@
 export AWS_DEFAULT_REGION="us-east-1"
 
 # ------------------------------------------------------------------------------
-# Phase 1: Delete SMB DataSync Task, Locations, and Agent
+# Phase 1: Delete SMB DataSync Tasks, Locations, and Agents
 # ------------------------------------------------------------------------------
 # Notes:
-#   - The SMB task, SMB location, and agent were created by activate-agent.sh
-#     outside of Terraform. They must be deleted via CLI before the S3 bucket
-#     and agent EC2 can be destroyed.
-#   - The agent cannot be deleted while tasks that reference it still exist.
+#   - Four tasks (two per agent) and their locations were created by
+#     activate-agent.sh outside Terraform. They must be deleted via CLI.
+#   - Collect all agent ARNs first; delete agents only after all tasks and
+#     locations referencing them have been removed.
+#   - The agent cannot be deleted while tasks or locations reference it.
 # ------------------------------------------------------------------------------
 echo "NOTE: Cleaning up agent-based DataSync resources..."
 
-SMB_TASK_ARN=$(aws ssm get-parameter \
-  --name "/datasync/smb-task-arn" \
-  --query 'Parameter.Value' \
-  --output text 2>/dev/null || true)
+declare -a TASK_ARNS=()
+declare -a SMB_ARNS=()
+declare -a S3_ARNS=()
+declare -A AGENT_ARNS=()  # associative to deduplicate the two agents
 
-if [[ -n "${SMB_TASK_ARN}" ]]; then
-  echo "NOTE: Deleting SMB DataSync task: ${SMB_TASK_ARN}"
+for PROJECT in aws-efs aws-mgn-example aws-workspaces aws-mysql; do
+  TASK_ARN=$(aws ssm get-parameter \
+    --name "/datasync/smb-task-arn/${PROJECT}" \
+    --query 'Parameter.Value' --output text 2>/dev/null || true)
 
-  # Read location and agent ARNs before deleting anything.
-  SMB_SRC_ARN=$(aws datasync describe-task \
-    --task-arn "${SMB_TASK_ARN}" \
-    --query 'SourceLocationArn' \
-    --output text 2>/dev/null || true)
+  [[ -z "${TASK_ARN}" ]] && continue
 
-  SMB_DST_ARN=$(aws datasync describe-task \
-    --task-arn "${SMB_TASK_ARN}" \
-    --query 'DestinationLocationArn' \
-    --output text 2>/dev/null || true)
+  echo "NOTE: Found task for ${PROJECT}: ${TASK_ARN}"
+  TASK_ARNS+=("${TASK_ARN}")
+
+  SMB_SRC=$(aws datasync describe-task \
+    --task-arn "${TASK_ARN}" \
+    --query 'SourceLocationArn' --output text 2>/dev/null || true)
+  S3_DST=$(aws datasync describe-task \
+    --task-arn "${TASK_ARN}" \
+    --query 'DestinationLocationArn' --output text 2>/dev/null || true)
+
+  [[ -n "${SMB_SRC}" && "${SMB_SRC}" != "None" ]] && SMB_ARNS+=("${SMB_SRC}")
+  [[ -n "${S3_DST}"  && "${S3_DST}"  != "None" ]] && S3_ARNS+=("${S3_DST}")
 
   AGENT_ARN=$(aws datasync describe-location-smb \
-    --location-arn "${SMB_SRC_ARN}" \
-    --query 'AgentArns[0]' \
-    --output text 2>/dev/null || true)
+    --location-arn "${SMB_SRC}" \
+    --query 'AgentArns[0]' --output text 2>/dev/null || true)
+  [[ -n "${AGENT_ARN}" && "${AGENT_ARN}" != "None" ]] && AGENT_ARNS["${AGENT_ARN}"]=1
+done
 
-  # Cancel any active execution before attempting task deletion.
-  # DataSync rejects delete-task while an execution is in progress.
+# Cancel any in-progress executions before deleting tasks.
+for TASK_ARN in "${TASK_ARNS[@]}"; do
   ACTIVE_EXEC=$(aws datasync list-task-executions \
-    --task-arn "${SMB_TASK_ARN}" \
+    --task-arn "${TASK_ARN}" \
     --query 'TaskExecutions[?Status!=`SUCCESS` && Status!=`ERROR`].TaskExecutionArn' \
     --output text 2>/dev/null || true)
 
   if [[ -n "${ACTIVE_EXEC}" ]]; then
-    echo "NOTE: Cancelling active task execution: ${ACTIVE_EXEC}"
+    echo "NOTE: Cancelling active execution: ${ACTIVE_EXEC}"
     aws datasync cancel-task-execution --task-execution-arn "${ACTIVE_EXEC}"
-
-    # Wait for the execution to reach a terminal state before proceeding.
     CANCEL_WAIT=0
     until [[ "${CANCEL_WAIT}" -ge 120 ]]; do
       STATUS=$(aws datasync describe-task-execution \
         --task-execution-arn "${ACTIVE_EXEC}" \
         --query 'Status' --output text 2>/dev/null || echo "UNKNOWN")
       [[ "${STATUS}" == "ERROR" || "${STATUS}" == "SUCCESS" ]] && break
-      echo "NOTE: Waiting for execution to stop (status: ${STATUS})..."
+      echo "NOTE: Waiting for execution to stop (${STATUS})..."
       sleep 10
       CANCEL_WAIT=$(( CANCEL_WAIT + 10 ))
     done
   fi
+done
 
-  aws datasync delete-task --task-arn "${SMB_TASK_ARN}"
-  echo "NOTE: SMB task deleted."
+# Delete all tasks first, then locations, then agents.
+for TASK_ARN in "${TASK_ARNS[@]}"; do
+  aws datasync delete-task --task-arn "${TASK_ARN}"
+  echo "NOTE: Task deleted: ${TASK_ARN}"
+done
 
-  if [[ -n "${SMB_SRC_ARN}" ]] && [[ "${SMB_SRC_ARN}" != "None" ]]; then
-    aws datasync delete-location --location-arn "${SMB_SRC_ARN}"
-    echo "NOTE: SMB source location deleted."
-  fi
+for SMB_ARN in "${SMB_ARNS[@]}"; do
+  aws datasync delete-location --location-arn "${SMB_ARN}"
+  echo "NOTE: SMB location deleted: ${SMB_ARN}"
+done
 
-  if [[ -n "${SMB_DST_ARN}" ]] && [[ "${SMB_DST_ARN}" != "None" ]]; then
-    aws datasync delete-location --location-arn "${SMB_DST_ARN}"
-    echo "NOTE: SMB S3 destination location deleted."
-  fi
+for S3_ARN in "${S3_ARNS[@]}"; do
+  aws datasync delete-location --location-arn "${S3_ARN}"
+  echo "NOTE: S3 location deleted: ${S3_ARN}"
+done
 
-  if [[ -n "${AGENT_ARN}" ]] && [[ "${AGENT_ARN}" != "None" ]]; then
-    aws datasync delete-agent --agent-arn "${AGENT_ARN}"
-    echo "NOTE: DataSync agent deregistered."
-  fi
+for AGENT_ARN in "${!AGENT_ARNS[@]}"; do
+  aws datasync delete-agent --agent-arn "${AGENT_ARN}"
+  echo "NOTE: Agent deregistered: ${AGENT_ARN}"
+done
 
-  aws ssm delete-parameter --name "/datasync/smb-task-arn" 2>/dev/null || true
-  echo "NOTE: SSM parameter /datasync/smb-task-arn deleted."
-else
-  echo "NOTE: No SMB task ARN found in SSM — skipping agent cleanup."
-fi
+# Delete SSM parameters for all four projects.
+for PROJECT in aws-efs aws-mgn-example aws-workspaces aws-mysql; do
+  aws ssm delete-parameter --name "/datasync/smb-task-arn/${PROJECT}" 2>/dev/null || true
+done
+echo "NOTE: SSM parameters deleted."
 
 echo ""
 

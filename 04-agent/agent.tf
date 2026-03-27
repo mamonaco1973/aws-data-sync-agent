@@ -2,22 +2,25 @@
 # FILE: agent.tf
 #
 # Purpose:
-#   - Provisions an AWS DataSync agent EC2 instance.
-#   - The agent enables DataSync to reach SMB sources inside the VPC that
-#     are not accessible from the public DataSync service endpoints.
+#   - Provisions two AWS DataSync agent EC2 instances.
+#   - Each agent handles two of the four EFS project directories, distributing
+#     transfer load across independent agents running in parallel.
 #
 # Scope:
 #   - DataSync agent AMI resolution via SSM.
-#   - Security group allowing HTTP/80 for activation and outbound SMB/445.
-#   - EC2 instance running the DataSync agent software.
+#   - Shared security group allowing HTTP/80 for activation and outbound SMB/445.
+#   - Two EC2 instances running the DataSync agent software.
+#
+# Agent assignment (configured in activate-agent.sh):
+#   - Agent 1: aws-efs, aws-mgn-example
+#   - Agent 2: aws-workspaces, aws-mysql
 #
 # Notes:
 #   - The agent AMI is maintained by AWS and resolved dynamically via the
 #     standard SSM parameter path.
-#   - After Terraform apply, activate-agent.sh performs HTTP activation and
-#     registers the agent with the DataSync service.
-#   - Port 80 must remain open until activation completes; it can be removed
-#     from the security group afterwards in production environments.
+#   - After Terraform apply, activate-agent.sh performs HTTP activation for
+#     each agent and registers them with the DataSync service.
+#   - Port 80 must remain open until activation completes.
 # ================================================================================
 
 # ================================================================================
@@ -38,8 +41,9 @@ data "aws_ssm_parameter" "datasync_ami" {
 # RESOURCE: aws_security_group.datasync_agent_sg
 # ================================================================================
 # Purpose:
+#   - Shared security group attached to both agent instances.
 #   - Allows inbound HTTP/80 from anywhere for one-time agent activation.
-#   - Allows all outbound traffic so the agent can reach the SMB share on
+#   - Allows all outbound traffic so agents can reach the SMB share on
 #     efs-client-gateway (TCP/445) and DataSync service endpoints (HTTPS/443).
 #
 # Notes:
@@ -64,7 +68,7 @@ resource "aws_security_group" "datasync_agent_sg" {
 
   # ------------------------------------------------------------------------------
   # EGRESS: ALL
-  # Allows the agent to reach the SMB share (TCP/445) and AWS endpoints.
+  # Allows agents to reach the SMB share (TCP/445) and AWS endpoints.
   # ------------------------------------------------------------------------------
   egress {
     description = "Allow all outbound traffic"
@@ -78,22 +82,12 @@ resource "aws_security_group" "datasync_agent_sg" {
 }
 
 # ================================================================================
-# RESOURCE: aws_instance.datasync_agent
+# RESOURCE: aws_instance.datasync_agent_1
 # ================================================================================
 # Purpose:
-#   - Runs the AWS DataSync agent software.
-#   - Acts as the bridge between the DataSync service and the Samba SMB share
-#     running on efs-client-gateway inside the VPC.
-#
-# Notes:
-#   - t3.large is the minimum recommended size for DataSync agents to avoid
-#     memory pressure during transfer operations.
-#   - A public IP is required so activate-agent.sh can reach port 80 for the
-#     one-time activation handshake.
-#   - No IAM instance profile is required — the agent authenticates to the
-#     DataSync service using the activation key, not instance credentials.
+#   - First DataSync agent. Handles aws-efs and aws-mgn-example transfers.
 # ================================================================================
-resource "aws_instance" "datasync_agent" {
+resource "aws_instance" "datasync_agent_1" {
   ami           = data.aws_ssm_parameter.datasync_ami.value
   instance_type = "t3.large"
 
@@ -102,28 +96,48 @@ resource "aws_instance" "datasync_agent" {
   associate_public_ip_address = true
 
   tags = {
-    Name = "datasync-agent"
+    Name = "datasync-agent-1"
   }
 }
 
 # ================================================================================
-# OUTPUT: agent_public_ip
+# RESOURCE: aws_instance.datasync_agent_2
 # ================================================================================
 # Purpose:
-#   - Exposes the agent's public IP for use in activate-agent.sh.
+#   - Second DataSync agent. Handles aws-workspaces and aws-mysql transfers.
 # ================================================================================
-output "agent_public_ip" {
-  description = "Public IP of the DataSync agent EC2 instance"
-  value       = aws_instance.datasync_agent.public_ip
+resource "aws_instance" "datasync_agent_2" {
+  ami           = data.aws_ssm_parameter.datasync_ami.value
+  instance_type = "t3.large"
+
+  subnet_id                   = data.aws_subnet.vm_subnet_1.id
+  vpc_security_group_ids      = [aws_security_group.datasync_agent_sg.id]
+  associate_public_ip_address = true
+
+  tags = {
+    Name = "datasync-agent-2"
+  }
 }
 
 # ================================================================================
-# OUTPUT: agent_instance_id
+# OUTPUTS: Agent public IPs
 # ================================================================================
-# Purpose:
-#   - Exposes the instance ID for reference and debugging.
-# ================================================================================
-output "agent_instance_id" {
-  description = "EC2 instance ID of the DataSync agent"
-  value       = aws_instance.datasync_agent.id
+output "agent_1_public_ip" {
+  description = "Public IP of DataSync agent 1 (aws-efs, aws-mgn-example)"
+  value       = aws_instance.datasync_agent_1.public_ip
+}
+
+output "agent_2_public_ip" {
+  description = "Public IP of DataSync agent 2 (aws-workspaces, aws-mysql)"
+  value       = aws_instance.datasync_agent_2.public_ip
+}
+
+output "agent_1_instance_id" {
+  description = "Instance ID of DataSync agent 1"
+  value       = aws_instance.datasync_agent_1.id
+}
+
+output "agent_2_instance_id" {
+  description = "Instance ID of DataSync agent 2"
+  value       = aws_instance.datasync_agent_2.id
 }
