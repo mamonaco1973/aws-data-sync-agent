@@ -7,8 +7,6 @@
         <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=18;fontStyle=1;" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;AWS DataSync Agent — SMB to S3 Migration Flow (Dual Agent)&lt;/font&gt;" vertex="1">
           <mxGeometry height="40" width="1060" x="60" y="15" as="geometry" />
         </mxCell>
-
-        <!-- Column headers -->
         <mxCell id="hdr-smb" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#248814;" value="SMB Source" vertex="1">
           <mxGeometry height="30" width="160" x="46" y="75" as="geometry" />
         </mxCell>
@@ -21,68 +19,48 @@
         <mxCell id="hdr-s3" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#248814;" value="S3 Destination" vertex="1">
           <mxGeometry height="30" width="160" x="856" y="75" as="geometry" />
         </mxCell>
-
-        <!-- SMB Source (efs-client-gateway) — single, centered vertically -->
         <mxCell id="smb-src" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.t3_instance;" value="efs-client-gateway&lt;div&gt;Samba / share: efs&lt;/div&gt;" vertex="1">
           <mxGeometry height="78" width="78" x="87" y="290" as="geometry" />
         </mxCell>
-
-        <!-- Agent 1 -->
         <mxCell id="agent-1" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.t3_instance;" value="datasync-agent-1&lt;div&gt;t3.large EC2&lt;/div&gt;" vertex="1">
           <mxGeometry height="78" width="78" x="327" y="165" as="geometry" />
         </mxCell>
-
-        <!-- Agent 2 -->
         <mxCell id="agent-2" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.t3_instance;" value="datasync-agent-2&lt;div&gt;t3.large EC2&lt;/div&gt;" vertex="1">
           <mxGeometry height="78" width="78" x="327" y="390" as="geometry" />
         </mxCell>
-
-        <!-- Tasks for Agent 1 -->
         <mxCell id="task-efs" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.datasync;" value="sync-aws-efs" vertex="1">
           <mxGeometry height="72" width="72" x="590" y="115" as="geometry" />
         </mxCell>
         <mxCell id="task-mgn" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.datasync;" value="sync-aws-mgn-example" vertex="1">
           <mxGeometry height="72" width="72" x="590" y="235" as="geometry" />
         </mxCell>
-
-        <!-- Tasks for Agent 2 -->
         <mxCell id="task-workspaces" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.datasync;" value="sync-aws-workspaces" vertex="1">
           <mxGeometry height="72" width="72" x="590" y="360" as="geometry" />
         </mxCell>
         <mxCell id="task-mysql" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.datasync;" value="sync-aws-mysql" vertex="1">
           <mxGeometry height="72" width="72" x="590" y="480" as="geometry" />
         </mxCell>
-
-        <!-- S3 destination (single, centered) -->
         <mxCell id="s3-dst" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#7AA116;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" value="s3://bucket/efs/" vertex="1">
           <mxGeometry height="72" width="72" x="900" y="290" as="geometry" />
         </mxCell>
-
-        <!-- SMB edges: smb-src → agent-1, smb-src → agent-2 -->
         <mxCell id="a-smb-agent1" edge="1" parent="1" source="smb-src" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#E7157B;fontColor=#E7157B;fontSize=11;" target="agent-1" value="SMB/445">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="a-smb-agent2" edge="1" parent="1" source="smb-src" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#E7157B;fontColor=#E7157B;fontSize=11;" target="agent-2" value="SMB/445">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <!-- Agent 1 → tasks (dashed HTTPS) -->
         <mxCell id="a-agent1-task-efs" edge="1" parent="1" source="agent-1" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#E7157B;fontColor=#E7157B;fontSize=11;dashed=1;" target="task-efs" value="HTTPS">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="a-agent1-task-mgn" edge="1" parent="1" source="agent-1" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#E7157B;fontColor=#E7157B;fontSize=11;dashed=1;" target="task-mgn" value="HTTPS">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <!-- Agent 2 → tasks (dashed HTTPS) -->
         <mxCell id="a-agent2-task-ws" edge="1" parent="1" source="agent-2" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#E7157B;fontColor=#E7157B;fontSize=11;dashed=1;" target="task-workspaces" value="HTTPS">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="a-agent2-task-mysql" edge="1" parent="1" source="agent-2" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#E7157B;fontColor=#E7157B;fontSize=11;dashed=1;" target="task-mysql" value="HTTPS">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <!-- Task → S3 edges -->
         <mxCell id="a-task-efs-s3" edge="1" parent="1" source="task-efs" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#7AA116;fontColor=#248814;fontSize=11;" target="s3-dst" value="writes">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -95,13 +73,9 @@
         <mxCell id="a-task-mysql-s3" edge="1" parent="1" source="task-mysql" style="endArrow=block;endFill=1;html=1;rounded=0;strokeColor=#7AA116;fontColor=#248814;fontSize=11;" target="s3-dst" value="writes">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <!-- Activation note -->
         <mxCell id="activation-box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9C4;strokeColor=#E7157B;dashed=1;strokeWidth=2;fontSize=11;fontStyle=2;fontColor=#E7157B;align=center;" value="One-time activation per agent: activate-agent.sh polls HTTP:80 on each agent EC2 to retrieve an activation key, then calls aws datasync create-agent for each" vertex="1">
-          <mxGeometry height="80" width="220" x="255" y="110" as="geometry" />
+          <mxGeometry height="80" width="220" x="270" y="286" as="geometry" />
         </mxCell>
-
-        <!-- Lifecycle strip -->
         <mxCell id="lc-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;" value="Task Execution Lifecycle" vertex="1">
           <mxGeometry height="28" width="220" x="89" y="620" as="geometry" />
         </mxCell>
