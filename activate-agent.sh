@@ -29,6 +29,8 @@ ACTIVATION_TIMEOUT=300
 ACTIVATION_INTERVAL=10
 
 # Projects assigned to each agent: "name:subdirectory" pairs.
+# Subdirectory format: /<share-name>/<path-within-share>
+# The Samba share "efs" has path = /efs, so /efs/aws-efs → /efs/aws-efs on disk.
 AGENT_1_PROJECTS=("aws-efs:/efs/aws-efs" "aws-mgn-example:/efs/aws-mgn-example")
 AGENT_2_PROJECTS=("aws-workspaces:/efs/aws-workspaces" "aws-mysql:/efs/aws-mysql")
 
@@ -39,7 +41,6 @@ AGENT_2_PROJECTS=("aws-workspaces:/efs/aws-workspaces" "aws-mysql:/efs/aws-mysql
 echo "============================================================================"
 echo "DataSync Agent — Checking Activation State"
 echo "============================================================================"
-echo ""
 
 ALL_PRESENT=true
 for PROJECT in aws-efs aws-mgn-example aws-workspaces aws-mysql; do
@@ -55,7 +56,6 @@ done
 if [[ "${ALL_PRESENT}" == "true" ]]; then
   echo "NOTE: All SMB tasks already activated. Skipping."
   echo "NOTE: Delete /datasync/smb-task-arn/* parameters to re-activate."
-  echo ""
   exit 0
 fi
 
@@ -65,14 +65,12 @@ fi
 echo "============================================================================"
 echo "DataSync Agent — Retrieving Agent IPs"
 echo "============================================================================"
-echo ""
 
 AGENT_1_IP=$(terraform -chdir="${SCRIPT_DIR}/04-agent" output -raw agent_1_public_ip)
 AGENT_2_IP=$(terraform -chdir="${SCRIPT_DIR}/04-agent" output -raw agent_2_public_ip)
 
 echo "NOTE: Agent 1 IP: ${AGENT_1_IP}"
 echo "NOTE: Agent 2 IP: ${AGENT_2_IP}"
-echo ""
 
 # ------------------------------------------------------------------------------
 # Helper: activate_agent <ip> <name>
@@ -121,12 +119,9 @@ activate_agent() {
 echo "============================================================================"
 echo "DataSync Agent — Activating Agents"
 echo "============================================================================"
-echo ""
 
 AGENT_1_ARN=$(activate_agent "${AGENT_1_IP}" "mcloud-datasync-agent-1" | tail -1)
-echo ""
 AGENT_2_ARN=$(activate_agent "${AGENT_2_IP}" "mcloud-datasync-agent-2" | tail -1)
-echo ""
 
 # ------------------------------------------------------------------------------
 # Discover efs-client-gateway Private IP
@@ -136,7 +131,6 @@ echo ""
 echo "============================================================================"
 echo "DataSync Agent — Discovering SMB Server"
 echo "============================================================================"
-echo ""
 
 SMB_HOST=$(aws ec2 describe-instances \
   --filters "Name=tag:Name,Values=efs-client-gateway" \
@@ -150,7 +144,6 @@ if [[ -z "${SMB_HOST}" ]] || [[ "${SMB_HOST}" == "None" ]]; then
 fi
 
 echo "NOTE: SMB server private IP: ${SMB_HOST}"
-echo ""
 
 # ------------------------------------------------------------------------------
 # Retrieve AD Credentials from Secrets Manager
@@ -172,7 +165,6 @@ if [[ -z "${SMB_USER}" ]] || [[ -z "${SMB_PASSWORD}" ]]; then
 fi
 
 echo "NOTE: SMB credentials retrieved for user: ${SMB_USER}"
-echo ""
 
 # ------------------------------------------------------------------------------
 # Retrieve S3 and CloudWatch Resources from 03-datasync Terraform Outputs
@@ -192,7 +184,6 @@ LOG_GROUP_ARN=$(aws logs describe-log-groups \
 echo "NOTE: S3 bucket:      ${S3_BUCKET}"
 echo "NOTE: Role ARN:       ${DATASYNC_ROLE_ARN}"
 echo "NOTE: Log group:      ${LOG_GROUP}"
-echo ""
 
 # ------------------------------------------------------------------------------
 # Helper: create_task <agent_arn> <agent_label> <project_name> <subdirectory>
@@ -209,7 +200,7 @@ create_task() {
   echo "NOTE: Creating task for ${PROJECT} (${AGENT_LABEL})"
   echo "--------------------------------------------------------------------"
 
-  # SMB source location — subdirectory is relative to the share root (/efs).
+  # SMB source location — format: /<share-name>/<path-within-share>.
   local SMB_ARN
   SMB_ARN=$(aws datasync create-location-smb \
     --server-hostname "${SMB_HOST}" \
@@ -255,7 +246,6 @@ create_task() {
     --overwrite
 
   echo "NOTE: Stored in SSM: /datasync/smb-task-arn/${PROJECT}"
-  echo ""
 }
 
 # ------------------------------------------------------------------------------
@@ -264,7 +254,6 @@ create_task() {
 echo "============================================================================"
 echo "DataSync Agent 1 — Creating Tasks"
 echo "============================================================================"
-echo ""
 
 for ENTRY in "${AGENT_1_PROJECTS[@]}"; do
   PROJECT="${ENTRY%%:*}"
@@ -278,7 +267,6 @@ done
 echo "============================================================================"
 echo "DataSync Agent 2 — Creating Tasks"
 echo "============================================================================"
-echo ""
 
 for ENTRY in "${AGENT_2_PROJECTS[@]}"; do
   PROJECT="${ENTRY%%:*}"
@@ -292,10 +280,7 @@ done
 echo "============================================================================"
 echo "DataSync Agent — Activation Complete"
 echo "============================================================================"
-echo ""
 echo "NOTE: Agent 1 ARN: ${AGENT_1_ARN}"
 echo "      Tasks:       aws-efs, aws-mgn-example"
-echo ""
 echo "NOTE: Agent 2 ARN: ${AGENT_2_ARN}"
 echo "      Tasks:       aws-workspaces, aws-mysql"
-echo ""

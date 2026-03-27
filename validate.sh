@@ -163,7 +163,7 @@ for NAME in "${!EXEC_MAP[@]}"; do
   EXEC_ARN="${EXEC_MAP[${NAME}]}"
   RESULT=$(aws datasync describe-task-execution \
     --task-execution-arn "${EXEC_ARN}" \
-    --query '[Status, Result.TransferredCount, Result.VerifiedCount]' \
+    --query '[Status, FilesTransferred, FilesVerified]' \
     --output text 2>/dev/null || echo "UNKNOWN")
   echo "NOTE: ${NAME} — ${RESULT}"
 done
@@ -172,7 +172,7 @@ if [[ -n "${BUCKET}" ]]; then
   echo ""
   echo "NOTE: Destination bucket: s3://${BUCKET}"
   echo ""
-  aws s3 ls s3://${BUCKET}/efs/
+  aws s3 ls s3://${BUCKET}/
   echo ""
 fi
 
