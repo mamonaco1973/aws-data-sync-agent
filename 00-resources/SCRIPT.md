@@ -21,7 +21,8 @@ In these situations DataSync uses agents — lightweight virtual appliances that
 [Show architecture diagram briefly]
 
 In this project we’ll build a complete DataSync pipeline
-with Terraform that migrates data from an SMB 
+with Terraform that migrates data from an SMB file share
+to Amazon S3 using multiple DataSync agents.
 
 ---
 
