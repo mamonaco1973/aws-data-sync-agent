@@ -266,11 +266,12 @@ identity by SSSD/winbind.
 - **Agent task is CLI-managed, not Terraform**: The DataSync agent, SMB
   location, S3 location, and task are all created by `activate-agent.sh`.
   `destroy.sh` must clean them up via CLI before `terraform destroy 04-agent`.
-- **SMB subdirectory is relative to the share root**: In `create-location-smb`,
-  `--subdirectory /aws-efs` accesses `/efs/aws-efs` on the filesystem because
-  the Samba `efs` share has `path = /efs`. Pointing each task at a specific
-  project subdirectory avoids scanning `/home` (which is `chmod 700` and
-  inaccessible to rpatel for other users' directories).
+- **SMB subdirectory format is `/<share-name>/<path>`**: In `create-location-smb`,
+  the `--subdirectory` value begins with the Samba share name, not a filesystem
+  path. `/efs/aws-efs` means: mount share `efs`, navigate to `/aws-efs` within
+  it (which resolves to `/efs/aws-efs` on the filesystem). Using `/aws-efs`
+  alone tells DataSync to mount a share named `aws-efs`, which does not exist —
+  causing `mount error(2): No such file or directory`.
 - **Activation key is one-time**: The HTTP endpoint on port 80 returns the key
   only once and only while the agent is in an unactivated state. `activate-
   agent.sh` is idempotent via the SSM sentinel check.

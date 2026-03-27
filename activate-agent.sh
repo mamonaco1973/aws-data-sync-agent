@@ -29,8 +29,8 @@ ACTIVATION_TIMEOUT=300
 ACTIVATION_INTERVAL=10
 
 # Projects assigned to each agent: "name:subdirectory" pairs.
-AGENT_1_PROJECTS=("aws-efs:/aws-efs" "aws-mgn-example:/aws-mgn-example")
-AGENT_2_PROJECTS=("aws-workspaces:/aws-workspaces" "aws-mysql:/aws-mysql")
+AGENT_1_PROJECTS=("aws-efs:/efs/aws-efs" "aws-mgn-example:/efs/aws-mgn-example")
+AGENT_2_PROJECTS=("aws-workspaces:/efs/aws-workspaces" "aws-mysql:/efs/aws-mysql")
 
 # ------------------------------------------------------------------------------
 # Idempotency Guard
