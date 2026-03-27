@@ -4,25 +4,24 @@
 
 ## Introduction
 
-[Show DataSync task execution running with throughput and file counts updating]
+[Show DataSync console with a task ready to run]
 
-In the last video we used AWS DataSync to move data from Amazon EFS directly into S3 without any agent — DataSync injected a network interface into our VPC and mounted EFS internally.
+AWS DataSync can move data between many storage systems.
 
-[Show the DataSync Agents console page — empty or showing the new agents]
+But sometimes the storage system isn’t directly accessible from the AWS DataSync service.
 
-But what happens when your source storage isn't a native AWS service? What if your data lives on an SMB file share — the kind of share that Windows clients connect to?
+[Show SMB share mounted on Linux server]
 
-[Show a Windows File Explorer connected to the Samba share]
+For example, an SMB file share running inside a private environment.
 
-That's where the DataSync agent comes in.
+[Show DataSync agent EC2 instances]
 
-[Show two DataSync agent EC2 instances in the EC2 console]
+In these situations DataSync uses agents — lightweight virtual appliances that act as a bridge between the storage system and the DataSync service.
 
-In this project we'll deploy two DataSync agents — purpose-built EC2 instances that run inside your VPC and act as a bridge between the DataSync service and an SMB source that DataSync cannot reach on its own.
+[Show architecture diagram briefly]
 
-[Show the flow diagram]
-
-The source is a Samba share running on our domain-joined Linux gateway, backed by Amazon EFS. Each agent mounts that share over SMB and streams its assigned data through DataSync into S3 — all four transfers running concurrently.
+In this project we’ll build a complete DataSync pipeline
+with Terraform that migrates data from an SMB 
 
 ---
 
