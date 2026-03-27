@@ -45,9 +45,12 @@ echo "${efs_mnt_server}:/ /efs efs _netdev,tls 0 0" >> /etc/fstab
 systemctl daemon-reload
 
 # Wait for EFS DNS to propagate — mount target may not be resolvable immediately
-# after Terraform marks it available. Retry for up to 5 minutes.
+# after Terraform marks it available. Uses dig rather than getent hosts because
+# getent goes through NSS which is not reliably configured at this early stage
+# of userdata execution. dig queries DNS directly and accurately reflects when
+# the record becomes resolvable.
 for i in $(seq 1 20); do
-  if getent hosts "${efs_mnt_server}" > /dev/null 2>&1; then
+  if dig +short "${efs_mnt_server}" | grep -q '.'; then
     echo "EFS DNS resolved on attempt $i"
     break
   fi

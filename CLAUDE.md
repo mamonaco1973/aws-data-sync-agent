@@ -19,10 +19,10 @@ Key differences from **aws-data-sync**:
 |---|---|---|
 | DataSync source | EFS (agentless — ENI in VPC) | Samba SMB share (agent required) |
 | Phase 3 | EFS locations + tasks (Terraform) | S3 bucket + IAM + CloudWatch only |
-| Phase 4 | n/a | DataSync agent EC2 (Terraform) |
+| Phase 4 | n/a | Two DataSync agent EC2s (Terraform) |
 | Task creation | Terraform | `activate-agent.sh` (AWS CLI) |
-| Task count | 4 concurrent EFS tasks | 1 SMB task |
-| validate.sh | Reads task ARNs from Terraform output | Reads task ARN from SSM |
+| Task count | 4 concurrent EFS tasks | 4 SMB tasks (2 per agent) |
+| validate.sh | Reads task ARNs from Terraform output | Reads 4 task ARNs from SSM |
 
 The Active Directory controller is provisioned via an external reusable
 Terraform module: `github.com/mamonaco1973/module-aws-mini-ad`.
@@ -66,15 +66,16 @@ aws-data-sync-agent/
 │   ├── main.tf                # AWS + random providers; random_id.suffix
 │   └── s3.tf                  # S3 bucket: encrypted, versioned, private;
 │                              #   outputs datasync_bucket_name
-├── 04-agent/                  # Phase 4: DataSync agent EC2
-│   ├── agent.tf               # DataSync agent AMI (SSM), t3.large EC2,
-│   │                          #   security group (port 80 inbound for
-│   │                          #   activation); outputs agent_public_ip
+├── 04-agent/                  # Phase 4: DataSync agent EC2s
+│   ├── agent.tf               # DataSync agent AMI (SSM), two t3.large EC2s,
+│   │                          #   shared security group (port 80 inbound for
+│   │                          #   activation); outputs agent_1/2_public_ip
 │   ├── main.tf                # AWS provider, VPC + vm-subnet-1 data sources
 │   └── variables.tf           # vpc_name
-├── activate-agent.sh          # Registers agent via HTTP activation key,
-│                              #   creates SMB location + S3 location + task,
-│                              #   stores task ARN in SSM /datasync/smb-task-arn
+├── activate-agent.sh          # Registers both agents via HTTP activation keys,
+│                              #   creates 4 SMB locations + 4 S3 locations +
+│                              #   4 tasks (2 per agent); stores task ARNs in
+│                              #   SSM /datasync/smb-task-arn/<project>
 ├── apply.sh                   # Four-phase deploy + activate-agent.sh +
 │                              #   validate.sh
 ├── check_env.sh               # Validates aws, terraform, jq in PATH and
@@ -82,8 +83,9 @@ aws-data-sync-agent/
 ├── destroy.sh                 # Phase 1: CLI cleanup of SMB task/locations/
 │                              #   agent; Phase 2-6: terraform destroy in
 │                              #   reverse order, secrets deletion
-└── validate.sh                # Reads SMB task ARN from SSM, starts task,
-                               #   polls to SUCCESS/ERROR, downloads CW logs
+└── validate.sh                # Reads 4 SMB task ARNs from SSM, starts all
+                               #   tasks concurrently, polls to SUCCESS/ERROR,
+                               #   downloads CW logs per task
 ```
 
 ## Deployment Workflow
@@ -149,36 +151,40 @@ location or task resources here — those are created by `activate-agent.sh`.
   `datasync.amazonaws.com` to write log events
 - Outputs: `datasync_bucket_name`, `datasync_role_arn`, `datasync_log_group`
 
-### Phase 4 — DataSync Agent (`04-agent/`) — us-east-1
+### Phase 4 — DataSync Agents (`04-agent/`) — us-east-1
 
 - DataSync agent AMI resolved via SSM parameter `/aws/service/datasync/ami`
-- `t3.large` EC2 in `vm-subnet-1` with public IP
-- Security group: inbound TCP/80 for activation, all outbound (to reach the
-  Samba share on TCP/445 and DataSync service endpoints on HTTPS/443)
-- No IAM instance profile — agent authenticates to DataSync via activation key
-- Outputs: `agent_public_ip`, `agent_instance_id`
+- Two `t3.large` EC2 instances in `vm-subnet-1`, each with a public IP
+  - `datasync-agent-1`: handles `aws-efs`, `aws-mgn-example`
+  - `datasync-agent-2`: handles `aws-workspaces`, `aws-mysql`
+- Shared security group: inbound TCP/80 for activation, all outbound (to reach
+  the Samba share on TCP/445 and DataSync service endpoints on HTTPS/443)
+- No IAM instance profile — agents authenticate to DataSync via activation key
+- Outputs: `agent_1_public_ip`, `agent_2_public_ip`, `agent_1_instance_id`,
+  `agent_2_instance_id`
 
 ### Agent Activation (`activate-agent.sh`)
 
-Runs after Phase 4 Terraform apply. Idempotent — checks SSM for an existing
-task ARN and exits early if already activated.
+Runs after Phase 4 Terraform apply. Idempotent — checks SSM for all four task
+ARNs and exits early if already activated.
 
-1. Gets agent public IP from `04-agent` Terraform output
-2. Polls `http://<IP>/?gatewayType=SYNC&activationRegion=us-east-1&
-   endpointType=PUBLIC&no_redirect` until an activation key is returned
-3. `aws datasync create-agent --activation-key <key>`
-4. Discovers `efs-client-gateway` private IP via EC2 tag query
-5. Reads `rpatel_ad_credentials_efs` from Secrets Manager; strips domain
+1. Gets both agent public IPs from `04-agent` Terraform outputs
+2. For each agent: polls `http://<IP>/?gatewayType=SYNC&activationRegion=
+   us-east-1&endpointType=PUBLIC&no_redirect` until an activation key is
+   returned, then calls `aws datasync create-agent --activation-key <key>`
+3. Discovers `efs-client-gateway` private IP via EC2 tag query
+4. Reads `rpatel_ad_credentials_efs` from Secrets Manager; strips domain
    prefix from username (`MCLOUD\rpatel` → `rpatel`) — the `--domain` flag
    carries the domain; `--user` must be bare username only
-6. `aws datasync create-location-smb --server-hostname <private-ip>
-   --subdirectory /efs --user rpatel --domain MCLOUD --agent-arns <arn>`
-7. `aws datasync create-location-s3` — reuses the S3 bucket from Phase 3
-   with subdirectory `/smb-efs`
-8. `aws datasync create-task` — CloudWatch logging to `/datasync/smb-to-s3`,
+5. For each of four projects (two per agent): `aws datasync create-location-smb
+   --server-hostname <private-ip> --subdirectory /<project> --user rpatel
+   --domain MCLOUD --agent-arns <agent-arn>`
+6. `aws datasync create-location-s3` — reuses the S3 bucket from Phase 3
+   with per-project subdirectory (`/aws-efs`, `/aws-mgn-example`, etc.)
+7. `aws datasync create-task` — CloudWatch logging to `/datasync/smb-to-s3`,
    options: `TransferMode=CHANGED`, `PreserveDeletedFiles=REMOVE`,
    `VerifyMode=ONLY_FILES_TRANSFERRED`, `LogLevel=TRANSFER`
-9. Stores task ARN in SSM `/datasync/smb-task-arn`
+8. Stores each task ARN in SSM `/datasync/smb-task-arn/<project>`
 
 ## Script Details
 
@@ -188,23 +194,26 @@ four phases with `terraform init` + `apply -auto-approve`, runs
 `activate-agent.sh`, then calls `validate.sh`.
 
 ### `destroy.sh`
-1. Reads SMB task ARN from SSM `/datasync/smb-task-arn`
-2. Cancels any active task execution (DataSync rejects `delete-task` while
+1. Reads all 4 SMB task ARNs from SSM `/datasync/smb-task-arn/<project>`
+2. Cancels any active task executions (DataSync rejects `delete-task` while
    running)
-3. Deletes task → SMB source location → S3 destination location → agent
+3. Deletes tasks → SMB source locations → S3 destination locations → agents
+   (deduplication via associative array — two agents shared across 4 tasks)
    (CLI — these were created outside Terraform)
-4. `terraform destroy` on `04-agent`
-5. `terraform destroy` on `03-datasync`
-6. Deletes SSM parameter `/datasync/efs-ready`; `terraform destroy` on
+4. Deletes all 4 SSM task ARN parameters
+5. `terraform destroy` on `04-agent`
+6. `terraform destroy` on `03-datasync`
+7. Deletes SSM parameter `/datasync/efs-ready`; `terraform destroy` on
    `02-servers`
-7. Force-deletes 5 Secrets Manager secrets; `terraform destroy` on
+8. Force-deletes 5 Secrets Manager secrets; `terraform destroy` on
    `01-directory`
 
 ### `validate.sh`
-Reads the SMB task ARN from SSM `/datasync/smb-task-arn` (errors if not
-present — requires `activate-agent.sh` to have run). Starts the task, polls
-every 15 seconds until `SUCCESS` or `ERROR`, prints a transfer summary, and
-downloads CloudWatch log events to `datasync-smb-efs-<timestamp>.log`.
+Reads all 4 SMB task ARNs from SSM `/datasync/smb-task-arn/<project>` (errors
+if any are missing — requires `activate-agent.sh` to have run). Starts all 4
+tasks concurrently, polls every 15 seconds until all reach `SUCCESS` or any
+hits `ERROR`, prints a transfer summary, and downloads CloudWatch log events
+per task to `datasync-<project>-<timestamp>.log`.
 
 ### `activate-agent.sh`
 See Phase 4 Agent Activation above.
@@ -257,9 +266,11 @@ identity by SSSD/winbind.
 - **Agent task is CLI-managed, not Terraform**: The DataSync agent, SMB
   location, S3 location, and task are all created by `activate-agent.sh`.
   `destroy.sh` must clean them up via CLI before `terraform destroy 04-agent`.
-- **SMB subdirectory is the share name**: In `create-location-smb`, the
-  `--subdirectory` is `/efs` — the leading slash plus the Samba share name,
-  not a filesystem path.
+- **SMB subdirectory is relative to the share root**: In `create-location-smb`,
+  `--subdirectory /aws-efs` accesses `/efs/aws-efs` on the filesystem because
+  the Samba `efs` share has `path = /efs`. Pointing each task at a specific
+  project subdirectory avoids scanning `/home` (which is `chmod 700` and
+  inaccessible to rpatel for other users' directories).
 - **Activation key is one-time**: The HTTP endpoint on port 80 returns the key
   only once and only while the agent is in an unactivated state. `activate-
   agent.sh` is idempotent via the SSM sentinel check.
