@@ -20,67 +20,35 @@ In these situations DataSync uses agents — lightweight virtual appliances that
 
 [Show architecture diagram briefly]
 
-In this project we’ll build a complete DataSync pipeline
-with Terraform that migrates data from an SMB file share
-to Amazon S3 using multiple DataSync agents.
+In this project we’ll build a complete DataSync pipeline with Terraform that migrates data from an SMB file share to Amazon S3 using multiple DataSync agents.
 
 ---
 
 ## Architecture
 
-[FULL ARCHITECTURE DIAGRAM ON SCREEN]
+[ FULL DIAGRAM ON SCREEN ]
 
-Let's walk through the architecture.
+Now let's review the architecture.
 
-[Highlight ad-subnet with AD DC]
+[ Highlight LEFT column: "SMB Source" ]
 
-Phase one is the same Mini Active Directory setup we've used in previous projects. Samba 4 on Ubuntu acts as the domain controller for the mcloud.mikecloud.com domain, handling authentication and DNS for everything in the VPC.
+On the left side is the source storage. In this example the data lives on an SMB file share running on a Linux instance. This represents a common scenario where data is exposed through a network file protocol rather than directly through an AWS service.
 
-[Highlight efs-client-gateway in vm-subnet-1]
+[ Highlight SMB/445 arrows ]
 
-Phase two is the Linux gateway instance. It mounts Amazon EFS over NFS, and then re-exports that storage as a Samba SMB share named efs. Four GitHub repositories are cloned into EFS at boot — these are the data that DataSync will transfer.
+The DataSync agents access this storage using the SMB protocol over port 445.
 
-[Highlight both datasync-agent instances in vm-subnet-1]
+[ Highlight CENTER column: "DataSync Agents" ]
 
-Phase four provisions two DataSync agents — both t3.large EC2 instances running the AWS-provided agent AMI. They live inside the VPC so they can reach the Samba share on port 445. Neither has an IAM role — they authenticate to the DataSync service using activation keys.
+In the middle are the DataSync agents running as EC2 instances. Agents are required when the storage system cannot be accessed directly by the DataSync service. Each agent reads files from the SMB share and streams the data to AWS.
 
-[Show activate-agent.sh in the terminal]
+[ Highlight RIGHT column: "DataSync Tasks" ]
 
-After Terraform provisions the agent EC2 instances, we run activate-agent.sh. This script polls each agent's HTTP endpoint on port 80, retrieves a one-time activation key, and registers each agent with DataSync using the AWS CLI.
+Next are the DataSync tasks. Each task defines a source location and a destination location. Because this architecture uses two agents, multiple tasks can run at the same time, allowing transfers to run in parallel and increasing overall throughput.
 
-[Highlight the SMB/445 arrows between each datasync-agent and efs-client-gateway]
+[ Highlight FAR RIGHT column: "S3 Destination" ]
 
-Once activated, each agent mounts the Samba share over SMB using Active Directory credentials and makes its assigned data available to its DataSync tasks.
-
-[Highlight the HTTPS dashed arrows between DataSync service and both agents]
-
-The DataSync service communicates with each agent over HTTPS to coordinate the transfer. Agent one handles the aws-efs and aws-mgn-example repositories. Agent two handles aws-workspaces and aws-mysql. All four tasks run at the same time.
-
-[Highlight the S3 bucket]
-
-All four tasks write to the same encrypted, versioned S3 bucket, each landing under its own prefix inside the /efs path.
-
----
-
-## Flow Diagram
-
-[FLOW DIAGRAM ON SCREEN]
-
-[Highlight the activation note box]
-
-The one-time activation step happens once per agent. activate-agent.sh polls each HTTP endpoint, collects the key, and calls aws datasync create-agent. After that the HTTP port is no longer needed for either agent.
-
-[Highlight SMB source → both agent arrows]
-
-During a task execution both agents mount the same Samba share as the rpatel domain user, but each reads from a specific subdirectory — pointing only at the project repos assigned to that agent.
-
-[Highlight each agent's task arrows → S3]
-
-Each agent drives two DataSync tasks concurrently, and all four write to the same S3 bucket under separate prefixes. The service handles retries and integrity verification for each transfer independently.
-
-[Highlight the lifecycle strip at the bottom]
-
-Every task execution follows the same lifecycle — queued, launching, preparing, transferring, verifying, and finally success.
+When a task runs, the source data is written into the S3 destination.
 
 ---
 
