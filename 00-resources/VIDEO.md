@@ -1,5 +1,7 @@
 #AWS #DataSync #DataSyncAgent #SMB #S3 #Terraform #CloudMigration #ActiveDirectory #Samba
 
+*AWS DataSync Agents – SMB to S3 Migration with Terraform*
+
 Learn how to migrate SMB file shares to Amazon S3 using AWS DataSync agents. This project deploys a complete dual-agent DataSync architecture using Terraform.
 
 Unlike EFS transfers that can run agentless, SMB sources require a DataSync agent. In this lab we deploy two DataSync agent EC2 instances to run transfers concurrently and increase throughput.
